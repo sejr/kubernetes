@@ -56,9 +56,17 @@ func init() {
 		p.Spec.InitContainers[0].SecurityContext = &corev1.SecurityContext{AllowPrivilegeEscalation: pointer.BoolPtr(false)}
 	})
 	minimalValidPods[api.LevelRestricted][api.MajorMinorVersion(1, 8)] = restricted_1_8
+
+	// 1.21+: seccompProfile.type=Unconfined
+	restricted_1_21 := tweak(restricted_1_0, func(p *corev1.Pod) {
+		p.Spec.SecurityContext.SeccompProfile = &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeUnconfined}
+		p.Spec.Containers[0].SecurityContext.SeccompProfile = &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeUnconfined}
+		p.Spec.InitContainers[0].SecurityContext.SeccompProfile = &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeUnconfined}
+	})
+	minimalValidPods[api.LevelRestricted][api.MajorMinorVersion(1, 21)] = restricted_1_21
 }
 
-// getValidPod returns a minimal valid pod for the specified level and version.
+// getMinimalValidPod returns a minimal valid pod for the specified level and version.
 func getMinimalValidPod(level api.Level, version api.Version) (*corev1.Pod, error) {
 	originalVersion := version
 	for {
