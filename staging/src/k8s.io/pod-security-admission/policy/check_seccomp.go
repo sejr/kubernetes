@@ -17,6 +17,9 @@ limitations under the License.
 package policy
 
 import (
+	"fmt"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -40,131 +43,136 @@ undefined / nil
 */
 
 func init() {
-	addCheck(CheckSeccomp)
+	addCheck(CheckSeccompBaseline)
+	addCheck(CheckSeccompRestricted)
 }
 
-// CheckSeccomp returns a restricted level check
+// CheckSeccompBaseline returns a baseline level check
 // that verifies the seccomp profile in 1.0+
-func CheckSeccomp() Check {
+func CheckSeccompBaseline() Check {
 	return Check{
-		ID:    "seccomp",
-		Level: api.LevelRestricted,
+		ID:    "seccomp_baseline",
+		Level: api.LevelBaseline,
 		Versions: []VersionedCheck{
-			{
-				MinimumVersion: api.MajorMinorVersion(1, 0),
-				CheckPod:       seccomp_1_0,
-			},
+			// {
+			// 	MinimumVersion: api.MajorMinorVersion(1, 0),
+			// 	CheckPod:       seccomp_baseline_1_0,
+			// },
 			{
 				MinimumVersion: api.MajorMinorVersion(1, 19),
-				CheckPod:       seccomp_1_19,
-			},
-			{
-				MinimumVersion: api.MajorMinorVersion(1, 21),
-				CheckPod:       seccomp_1_21,
+				CheckPod:       seccomp_baseline_1_19,
 			},
 		},
 	}
 }
 
-// validSeccomp returns true if the seccomp profile is Localhost or RuntimeDefault
-func validSeccomp(t corev1.SeccompProfileType) bool {
-	return t == corev1.SeccompProfileTypeLocalhost ||
-		t == corev1.SeccompProfileTypeRuntimeDefault
+// CheckSeccompRestricted returns a restricted level check
+// that verifies the seccomp profile in 1.0+
+func CheckSeccompRestricted() Check {
+	return Check{
+		ID:    "seccomp_restricted",
+		Level: api.LevelRestricted,
+		Versions: []VersionedCheck{
+			// {
+			// 	MinimumVersion: api.MajorMinorVersion(1, 0),
+			// 	CheckPod:       seccomp_restricted_1_0,
+			// },
+			{
+				MinimumVersion: api.MajorMinorVersion(1, 19),
+				CheckPod:       seccomp_restricted_1_19,
+			},
+		},
+	}
 }
 
-func seccomp_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
-	forbiddenContainers := sets.NewString()
-	visitContainersWithPath(podSpec, field.NewPath("spec"), func(container *corev1.Container, path *field.Path) {
-		if container.SecurityContext != nil {
-			if container.SecurityContext.SeccompProfile != nil {
-				if !validSeccomp(container.SecurityContext.SeccompProfile.Type) {
-					forbiddenContainers.Insert(container.Name)
+const (
+	alphaAnnotationSeccompDefaultProfileName  = "seccomp.security.alpha.kubernetes.io/defaultProfileName"
+	alphaAnnotationSeccompAllowedProfileNames = "seccomp.security.alpha.kubernetes.io/allowedProfileNames"
+)
+
+// seccomp_baseline_1_0 is the baseline seccomp check for v1.0+.
+//
+// This check ensures that the seccomp alpha annotation is not explicitly set to `unconfined`.
+// func seccomp_baseline_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
+// 	return CheckResult{Allowed: true}
+// }
+
+// seccomp_baseline_1_19 is the baseline seccomp check for v1.19+.
+//
+// Starting in this version, seccomp profile is provided in the `securityContext.seccompProfile`
+// key, rather than the alpha annotation. This check ensures that the value at that key is
+// not explicitly set to `Unconfined`.
+func seccomp_baseline_1_19(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
+	forbidden := sets.NewString()
+
+	if podSpec.SecurityContext != nil {
+		if podSpec.SecurityContext.SeccompProfile != nil {
+			if podSpec.SecurityContext.SeccompProfile.Type == corev1.SeccompProfileTypeUnconfined {
+				forbidden.Insert(fmt.Sprintf("pod %s", podMetadata.Name))
+			}
+		}
+	}
+
+	visitContainersWithPath(podSpec, field.NewPath("spec"), func(c *corev1.Container, p *field.Path) {
+		if c.SecurityContext != nil {
+			if c.SecurityContext.SeccompProfile != nil {
+				if c.SecurityContext.SeccompProfile.Type == corev1.SeccompProfileTypeUnconfined {
+					forbidden.Insert(fmt.Sprintf("container %s", c.Name))
 				}
 			}
 		}
 	})
 
-	if podSpec.SecurityContext != nil {
-		if podSpec.SecurityContext.SeccompProfile != nil {
-			if !validSeccomp(podSpec.SecurityContext.SeccompProfile.Type) {
-				return CheckResult{
-					Allowed:         false,
-					ForbiddenReason: "seccomp profile",
-				}
-			}
-		} else {
-			if len(forbiddenContainers) > 0 {
-				return CheckResult{
-					Allowed:         false,
-					ForbiddenReason: "seccomp profile",
-				}
-			}
+	if len(forbidden) > 0 {
+		return CheckResult{
+			Allowed:         false,
+			ForbiddenReason: "seccomp profile",
+			ForbiddenDetail: strings.Join(forbidden.List(), ", "),
 		}
 	}
 
 	return CheckResult{Allowed: true}
 }
 
-func seccomp_1_19(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
-	forbiddenContainers := sets.NewString()
-	visitContainersWithPath(podSpec, field.NewPath("spec"), func(container *corev1.Container, path *field.Path) {
-		if container.SecurityContext != nil {
-			if container.SecurityContext.SeccompProfile != nil {
-				if !validSeccomp(container.SecurityContext.SeccompProfile.Type) {
-					forbiddenContainers.Insert(container.Name)
-				}
-			}
-		}
-	})
+// seccomp_restricted_1_0 is the restricted seccomp check for v1.0+.
+//
+// This check ensures that the seccomp alpha annotation is explicitly set to `runtime/default`
+// or `localhost`.
+// func seccomp_restricted_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
+// 	return CheckResult{Allowed: true}
+// }
+
+// seccomp_restricted_1_19 is the restricted seccomp check for v1.19+.
+//
+// Starting in this version, seccomp profile is provided in the `securityContext.seccompProfile`
+// key, rather than the alpha annotation. This check ensures that the value at that key is
+// explicitly set to `RuntimeDefault` or `Localhost`.
+func seccomp_restricted_1_19(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
+	forbidden := sets.NewString()
 
 	if podSpec.SecurityContext != nil {
 		if podSpec.SecurityContext.SeccompProfile != nil {
-			if !validSeccomp(podSpec.SecurityContext.SeccompProfile.Type) {
-				return CheckResult{
-					Allowed:         false,
-					ForbiddenReason: "seccomp profile",
-				}
-			}
-		} else {
-			if len(forbiddenContainers) > 0 {
-				return CheckResult{
-					Allowed:         false,
-					ForbiddenReason: "seccomp profile",
-				}
+			if podSpec.SecurityContext.SeccompProfile.Type == corev1.SeccompProfileTypeUnconfined {
+				forbidden.Insert("pod")
 			}
 		}
 	}
 
-	return CheckResult{Allowed: true}
-}
-
-func seccomp_1_21(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
-	forbiddenContainers := sets.NewString()
-	visitContainersWithPath(podSpec, field.NewPath("spec"), func(container *corev1.Container, path *field.Path) {
-		if container.SecurityContext != nil {
-			if container.SecurityContext.SeccompProfile != nil {
-				if !validSeccomp(container.SecurityContext.SeccompProfile.Type) {
-					forbiddenContainers.Insert(container.Name)
+	visitContainersWithPath(podSpec, field.NewPath("spec"), func(c *corev1.Container, p *field.Path) {
+		if c.SecurityContext != nil {
+			if c.SecurityContext.SeccompProfile != nil {
+				if c.SecurityContext.SeccompProfile.Type == corev1.SeccompProfileTypeUnconfined {
+					forbidden.Insert(fmt.Sprintf("container %s", c.Name))
 				}
 			}
 		}
 	})
 
-	if podSpec.SecurityContext != nil {
-		if podSpec.SecurityContext.SeccompProfile != nil {
-			if !validSeccomp(podSpec.SecurityContext.SeccompProfile.Type) {
-				return CheckResult{
-					Allowed:         false,
-					ForbiddenReason: "seccomp profile",
-				}
-			}
-		} else {
-			if len(forbiddenContainers) > 0 {
-				return CheckResult{
-					Allowed:         false,
-					ForbiddenReason: "seccomp profile",
-				}
-			}
+	if len(forbidden) > 0 {
+		return CheckResult{
+			Allowed:         false,
+			ForbiddenReason: "seccomp profile",
+			ForbiddenDetail: strings.Join(forbidden.List(), ", "),
 		}
 	}
 

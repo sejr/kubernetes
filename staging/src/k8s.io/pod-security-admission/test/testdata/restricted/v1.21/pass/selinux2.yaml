@@ -9,11 +9,17 @@ spec:
     securityContext:
       allowPrivilegeEscalation: false
       seLinuxOptions: {}
+      seccompProfile:
+        type: Unconfined
   initContainers:
   - image: k8s.gcr.io/pause
     name: initcontainer1
     securityContext:
       allowPrivilegeEscalation: false
+      seccompProfile:
+        type: Unconfined
   securityContext:
     runAsNonRoot: true
     seLinuxOptions: {}
+    seccompProfile:
+      type: Unconfined

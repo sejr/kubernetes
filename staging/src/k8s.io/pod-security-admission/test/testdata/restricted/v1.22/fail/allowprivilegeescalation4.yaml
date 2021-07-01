@@ -11,5 +11,9 @@ spec:
     name: initcontainer1
     securityContext:
       allowPrivilegeEscalation: false
+      seccompProfile:
+        type: Unconfined
   securityContext:
     runAsNonRoot: true
+    seccompProfile:
+      type: Unconfined

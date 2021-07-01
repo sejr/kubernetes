@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: seccomp_baseline6
+spec:
+  containers:
+  - image: k8s.gcr.io/pause
+    name: container1
+    securityContext:
+      seccompProfile:
+        localhostProfile: profiles/audit.json
+        type: Localhost
+  initContainers:
+  - image: k8s.gcr.io/pause
+    name: initcontainer1
+    securityContext:
+      seccompProfile:
+        type: ""
+  securityContext:
+    seccompProfile:
+      type: ""

@@ -6,11 +6,17 @@ spec:
   containers:
   - image: k8s.gcr.io/pause
     name: container1
-    securityContext: {}
+    securityContext:
+      seccompProfile:
+        type: Unconfined
   initContainers:
   - image: k8s.gcr.io/pause
     name: initcontainer1
     securityContext:
       allowPrivilegeEscalation: false
+      seccompProfile:
+        type: Unconfined
   securityContext:
     runAsNonRoot: true
+    seccompProfile:
+      type: Unconfined

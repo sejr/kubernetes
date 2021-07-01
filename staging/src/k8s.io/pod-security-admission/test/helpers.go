@@ -65,3 +65,22 @@ func ensureSELinuxOptions(p *corev1.Pod) *corev1.Pod {
 	}
 	return p
 }
+
+// ensureSeccompProfile ensures the pod and all initContainers and all containers have a non-nil seccompProfile.
+func ensureSeccompProfile(p *corev1.Pod) *corev1.Pod {
+	p = ensureSecurityContext(p)
+	if p.Spec.SecurityContext.SeccompProfile == nil {
+		p.Spec.SecurityContext.SeccompProfile = &corev1.SeccompProfile{}
+	}
+	for i := range p.Spec.Containers {
+		if p.Spec.Containers[i].SecurityContext.SeccompProfile == nil {
+			p.Spec.Containers[i].SecurityContext.SeccompProfile = &corev1.SeccompProfile{}
+		}
+	}
+	for i := range p.Spec.InitContainers {
+		if p.Spec.InitContainers[i].SecurityContext.SeccompProfile == nil {
+			p.Spec.InitContainers[i].SecurityContext.SeccompProfile = &corev1.SeccompProfile{}
+		}
+	}
+	return p
+}

@@ -11,11 +11,17 @@ spec:
       capabilities:
         add:
         - NET_RAW
+      seccompProfile:
+        type: Unconfined
   initContainers:
   - image: k8s.gcr.io/pause
     name: initcontainer1
     securityContext:
       allowPrivilegeEscalation: false
       capabilities: {}
+      seccompProfile:
+        type: Unconfined
   securityContext:
     runAsNonRoot: true
+    seccompProfile:
+      type: Unconfined

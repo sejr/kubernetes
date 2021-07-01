@@ -9,6 +9,8 @@ spec:
     securityContext:
       allowPrivilegeEscalation: false
       capabilities: {}
+      seccompProfile:
+        type: Unconfined
   initContainers:
   - image: k8s.gcr.io/pause
     name: initcontainer1
@@ -29,5 +31,9 @@ spec:
         - SETPCAP
         - SETUID
         - SYS_CHROOT
+      seccompProfile:
+        type: Unconfined
   securityContext:
     runAsNonRoot: true
+    seccompProfile:
+      type: Unconfined
